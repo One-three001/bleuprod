@@ -126,6 +126,7 @@
     opacity: 0;
     transform: scale(0.9) translateZ(-80px) rotateX(-20deg);
     transition: opacity 0.4s ease-in, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
   }
 
   .scroll-long {
@@ -138,33 +139,32 @@
   }
 
   .news-slide {
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 700;
     color: #F8FAFC;
     white-space: nowrap;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.5px;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
     display: inline-block;
   }
 
-  /* ===== BADGE DES SOURCES CORRIGÉ ===== */
-  .media-badge {
-    color: #38BDF8 !important; /* Force le bleu ciel */
+  /* ===== BADGES SIMPLIFIÉS ===== */
+  .category-badge {
+    color: #38BDF8 !important;
     font-weight: 900;
-    background: rgba(56, 189, 248, 0.15); /* Fond bleuté */
-    border: 1px solid rgba(56, 189, 248, 0.4); /* Bordure */
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.4);
     padding: 3px 8px;
     border-radius: 4px;
     font-size: 11px;
     letter-spacing: 1px;
     margin-right: 10px;
-    display: inline-inline-block;
+    display: inline-block;
     vertical-align: middle;
     box-shadow: 0 0 12px rgba(56, 189, 248, 0.1);
   }
 
-  /* Séparateur vertical moderne */
-  .media-separator {
+  .category-separator {
     color: rgba(56, 189, 248, 0.6);
     margin-right: 12px;
     font-weight: 700;
@@ -243,7 +243,7 @@
     .ticker-container { height: 40px; }
     .brand-badge { width: 90px; }
     .weather-panel { min-width: 145px; padding: 0 8px; }
-    .news-slide { font-size: 11.5px; }
+    .news-slide { font-size: 12px; }
   }
 
   /* Surlignages contextuels */
@@ -259,13 +259,13 @@
 
 <div class="ticker-container">
   <div class="brand-badge">
-    <img class="badge-logo" src="LOGO-BLEU-PRODUCTION-BON-02.png" alt="BLEU PRODUCTION">
+    <img class="badge-logo" src="E:/BLEU PRODUCTION/LOGO-BLEU-PRODUCTION-BON-02.png" alt="BLEU PRODUCTION">
     <span class="badge-text">INFO</span>
   </div>
 
   <div class="ticker-track" id="tickerTrack">
     <div id="slideWrapper" class="slide-wrapper">
-      <div id="newsSlide" class="news-slide"></div>
+      <div id="newsSlide" class="news-slide">CHARGEMENT DES FLUX DE PRODUCTION...</div>
     </div>
     <div class="ticker-mask"></div>
   </div>
@@ -337,34 +337,38 @@
     fetchWeather();
     setInterval(fetchWeather, 10000);
 
-    // 3. FLUX NEWS
-    let tickerMessages = [
-      "🔵 BLEU PRODUCTION • KONN TÈT OU KONN LAKAY OU",
-      "👍 REJOIGNEZ LA COMMUNAUTÉ • ABONNEZ-VOUS ET ACTIVEZ LA CLOCHE DE NOTIFICATION"
+    // 3. FLUX NEWS & MESSAGES PERSOS
+    const staticAnnouncements = [
+      "[BLEU PRODUCTION] • KONN TÈT OU KONN LAKAY OU",
+      "[BLEU PRODUCTION] • REJOIGNEZ-NOUS • ABONNEZ-VOUS ET ACTIVEZ LA CLOCHE DE NOTIFICATION"
     ];
 
-    // NOUVELLE LOGIQUE RADICALE ET FIABLE POUR ISOLER LA SOURCE
+    let currentRssNews = []; // Stocke uniquement les news des flux RSS
+    let globalQueue = [...staticAnnouncements]; // File finale combinée
+    let nextRssBuffer = null; // Zone tampon pour les mises à jour en tâche de fond
+    let currentMsgIndex = 0;
+
     function advancedHighlight(text) {
       let result = text;
 
-      // Si le texte contient le séparateur "•"
-      if (result.includes('•')) {
-        // On sépare au premier "•" rencontré
-        const parts = result.split('•');
-        const sourcePart = parts[0].trim();
-        // On recolle le reste du texte au cas où il y aurait d'autres puces
-        const infoPart = parts.slice(1).join('•').trim();
+      if (result.startsWith('[') && result.includes(']')) {
+        const closeBracketIndex = result.indexOf(']');
+        let category = result.substring(1, closeBracketIndex).trim().toUpperCase();
+        let content = result.substring(closeBracketIndex + 1).trim();
+        
+        if (content.startsWith('•')) {
+          content = content.substring(1).trim();
+        }
 
-        // On enveloppe proprement la première partie dans le badge bleu ciel
-        result = `<span class="media-badge">${sourcePart}</span><span class="media-separator">|</span>${infoPart}`;
+        result = `<span class="category-badge">${category}</span><span class="category-separator">|</span>${content}`;
       }
 
-      // Surlignage classique des mots importants
       const highlights = [
         { regex: /\b(GUERRE|CONFLIT|ATTAQUE|BOMBARDEMENT|FRAPPE|EXPLO(SION|SIONS)|MILITAIRE|ARMÉE|MISSILES?|COMBATS|DRONES?|SÉCURITÉ|CRISIS|ALERTE|OTAN|PENTAGONE|NUCLÉAIRE)\b/gi, class: 'highlight-war' },
         { regex: /\b(POLITIQUE|GOUVERNEMENT|ÉLECTION|MINISTRE|PRÉSIDENT|DIPLOMATIE|TRAITÉ|SÉNAT|PARLEMENT|CONSEIL DE SÉCURITÉ|ONU|ÉLYSÉE|MAISON BLANCHE|KREMLIN|NÉGOCIATIONS)\b/gi, class: 'highlight-politics' },
         { regex: /\b(HAITI|HAÏTI|PORT-AU-PRINCE|UKRAINE|GAZA|PROCHE-ORIENT|WASHINGTON|MOSCOU|PEKIN|PARIS)\b/gi, class: 'highlight-red' },
-        { regex: /\b(ÉCONOMIE|FINANCE|BOURSE|INFLATION|TAUX|PETROLE|BARRIL)\b/gi, class: 'highlight-blue' }
+        { regex: /\b(ÉCONOMIE|FINANCE|BOURSE|INFLATION|TAUX|PETROLE|BARRIL)\b/gi, class: 'highlight-blue' },
+        { regex: /\b(BASKET|NBA|LAKERS|CELTICS|FOOT|MATCH|LIVE|SCORE|CHAMPIONS|PRO M|LEBRON|CURRY|FINALES?|BALLON|MUTUELLE|TRANSFERT|JO\b)/gi, class: 'highlight-yellow' }
       ];
       
       for (let h of highlights) {
@@ -373,40 +377,37 @@
       return result;
     }
 
-async function fetchAggregatedNews() {
+    async function fetchAggregatedNews() {
       const sources = [
-        // --- Actualités Générales & Géopolitique (Francophones) ---
-        { name: "🌍 LE MONDE", url: "https://www.lemonde.fr/international/rss_full.xml" },
-        { name: "🛡️ LE FIGARO", url: "https://www.lefigaro.fr/rss/figaro_international.xml" },
-        { name: "📰 COURRIER INT.", url: "https://www.courrierinternational.com/feed/all/rss.xml" },
-        { name: "🌐 FRANCE 24", url: "https://www.france24.com/fr/monde/rss" },
-        { name: "💥 HAITI LIBRE", url: "https://www.haitilibre.com/haitilibre.xml" },
-        { name: "🏛️ REZO NÒDWÈS", url: "https://rezonodwes.com/?feed=rss2" },
-        { name: "📡 RFI L'INFO", url: "https://www.rfi.fr/fr/monde/rss" },
-        { name: "📰 LENOUVELLISTE", url: "https://lenouvelliste.com/rss.xml" },
-        { name: "🇬🇧 BBC INTER.", url: "https://feeds.bbci.co.uk/afrique/rss.xml" }, // Corrigé en Français
-        { name: "🇨🇭 RTS INFO", url: "https://www.rts.ch/info/monde/rss/" },
-        { name: "🇧🇪 RTBF MONDE", url: "https://rtbf.be/rss/flux/monde" },
+        { type: "MONDE", url: "https://www.france24.com/fr/monde/rss" },
+        { type: "MONDE", url: "https://www.rfi.fr/fr/monde/rss" },
+        { type: "MONDE", url: "https://feeds.bbci.co.uk/afrique/rss.xml" }, 
+        { type: "MONDE", url: "https://www.courrierinternational.com/feed/all/rss.xml" },
+        { type: "MONDE", url: "https://www.rfi.fr/fr/europe/rss" },
+        { type: "MONDE", url: "https://www.lemonde.fr/international/rss_full.xml" },
+        { type: "MONDE", url: "https://information.tv5monde.com/moyen-orient/rss" },
+        { type: "MONDE", url: "https://www.latribune.fr/entreprises-finance/industrie/aeronautique-defense/rss.xml" },
         
-        // --- Actualités Sports & Basket ---
-        { name: "🏀 BASKET USA", url: "https://www.basketusa.com/feed/" },
-        { name: "🏆 L'ÉQUIPE", url: "https://lequipe.fr/rss/actu_rss.xml" },
-        { name: "🚴 EUROSPORT", url: "https://www.eurosport.fr/rss.xml" },
-        { name: "⚽ FOOT MERCATO", url: "https://www.footmercato.net/flux-rss" }
+        { type: "ACTU", url: "https://www.haitilibre.com/haitilibre.xml" },
+        { type: "ACTU", url: "https://rezonodwes.com/?feed=rss2" },
+        { type: "ACTU", url: "https://lenouvelliste.com/rss.xml" },
+
+        { type: "SPORTS", url: "https://www.basketusa.com/feed/" },
+        { type: "SPORTS", url: "https://lequipe.fr/rss/actu_rss.xml" },
+        { type: "SPORTS", url: "https://www.eurosport.fr/rss.xml" },
+        { type: "SPORTS", url: "https://www.footmercato.net/flux-rss" }
       ];
       
       let dynamicNews = [];
-
-      // Récupération des données réelles des flux RSS
       const fetchPromises = sources.map(async (source) => {
         try {
           const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
           const response = await fetch(proxyUrl);
           const data = await response.json();
           if (data && data.items) {
-            return data.items.slice(0, 5).map(item => {
+            return data.items.slice(0, 8).map(item => {
               let title = (item.title || "").trim().toUpperCase();
-              return `${source.name} • ${title}`;
+              return `[${source.type}] ${title}`;
             });
           }
         } catch (e) {}
@@ -422,29 +423,18 @@ async function fetchAggregatedNews() {
         }
       } catch(e) {}
       
-      // Mélange aléatoire des véritables actualités reçues
       dynamicNews.sort(() => 0.5 - Math.random());
       
-      // Combinaison des flux RSS avec tes messages de la communauté (Abonnez-vous, etc.)
-      const finalNews = [...dynamicNews.slice(0, 40), ...tickerMessages];
-      
-      // Nettoyage des doublons éventuels
-      return [...new Map(finalNews.map(m => [m.substring(0, 70), m])).values()];
+      // On garde 45 news max et on nettoie les doublons
+      let cleanedRss = [...new Map(dynamicNews.slice(0, 45).map(m => [m.substring(0, 85), m])).values()];
+      return cleanedRss;
     }
 
-    let globalQueue = [...tickerMessages];
-    let currentMsgIndex = 0;
     const newsElement = document.getElementById('newsSlide');
     const slideWrapper = document.getElementById('slideWrapper');
     const tickerTrack = document.getElementById('tickerTrack');
     let animationTimeout = null;
     let scrollTimeout = null;
-
-    function stopCurrentAnimations() {
-      if (animationTimeout) clearTimeout(animationTimeout);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      slideWrapper.classList.remove('active', 'exit', 'scroll-long');
-    }
 
     function applyScrollIfNeeded() {
       requestAnimationFrame(() => {
@@ -470,8 +460,10 @@ async function fetchAggregatedNews() {
     }
 
     function displayCurrentMessage() {
-      if (!globalQueue.length) { globalQueue = [...tickerMessages]; currentMsgIndex = 0; }
-      if (currentMsgIndex >= globalQueue.length) currentMsgIndex = 0;
+      if (!globalQueue.length) { 
+        globalQueue = [...staticAnnouncements]; 
+        currentMsgIndex = 0; 
+      }
       
       newsElement.innerHTML = advancedHighlight(globalQueue[currentMsgIndex]);
       
@@ -479,7 +471,6 @@ async function fetchAggregatedNews() {
       void slideWrapper.offsetWidth; 
       
       slideWrapper.classList.add('active');
-      
       animationTimeout = setTimeout(() => { applyScrollIfNeeded(); }, 1200);
     }
     
@@ -491,28 +482,43 @@ async function fetchAggregatedNews() {
       slideWrapper.classList.add('exit');
       
       setTimeout(() => {
-        currentMsgIndex = (currentMsgIndex + 1) % globalQueue.length;
+        currentMsgIndex++;
+        
+        // CONFORME À TA DEMANDE : Si on a parcouru toute la file (Annonces d'intro + Flux RSS)
+        if (currentMsgIndex >= globalQueue.length) {
+          currentMsgIndex = 0; // On revient au début
+          
+          // S'il y a une mise à jour des flux RSS prête en arrière-plan, on l'adopte
+          if (nextRssBuffer && nextRssBuffer.length > 0) {
+            currentRssNews = nextRssBuffer;
+            nextRssBuffer = null;
+          }
+          
+          // AVANT CHAQUE RECOMMENCEMENT : On reconstruit la file avec les annonces en PREMIER
+          globalQueue = [...staticAnnouncements, ...currentRssNews];
+        }
+        
         displayCurrentMessage();
       }, 400);
     }
     
     async function refreshNewsQueue() {
-      const fresh = await fetchAggregatedNews();
-      if (fresh && fresh.length > 3) {
-        globalQueue = fresh;
-        currentMsgIndex = 0;
-        stopCurrentAnimations();
-        displayCurrentMessage();
+      const freshRss = await fetchAggregatedNews();
+      if (freshRss && freshRss.length > 3) {
+        // On stocke sagement dans la zone tampon sans écraser la lecture en cours
+        nextRssBuffer = freshRss;
       }
     }
     
-    // Initialisation
+    // Initialisation au lancement du script
     (async () => {
-      const initial = await fetchAggregatedNews();
-      if (initial && initial.length) globalQueue = initial;
+      currentRssNews = await fetchAggregatedNews();
+      // Première construction : Annonces d'abord, puis flux RSS
+      globalQueue = [...staticAnnouncements, ...currentRssNews];
       displayCurrentMessage();
     })();
     
+    // Tâche de fond : Actualise la zone tampon des flux toutes les 10 minutes
     setInterval(refreshNewsQueue, 10 * 60 * 1000);
     setTimeout(() => { if (window.location) window.location.reload(); }, 50 * 60 * 1000);
   })();
